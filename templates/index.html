@@ -37,39 +37,47 @@
 <body>
     <script>
         const socket = io();
-        const myId = Math.random().toString(36).substr(2, 9); // Unique ID for this client
 
         document.addEventListener('mousemove', (event) => {
-            socket.emit('move_cursor', { id: myId, x: event.clientX, y: event.clientY });
+            socket.emit('move_cursor', { x: event.clientX, y: event.clientY });
         });
 
         socket.on('update_cursors', (data) => {
-            const { positions, distances } = data;
-            const activeIds = Object.keys(positions);
+            const activeClients = data.active_clients;
+            const activeIds = Object.keys(activeClients);
 
             // Update active cursors
-            activeIds.forEach(id => {
-                updateCursor(id, positions[id]);
+            activeIds.forEach(clientID => {
+                updateCursor(clientID, activeClients[clientID]['position']);
             });
 
             // Remove cursors of disconnected clients
             removeDisconnectedCursors(activeIds);
 
             // Update leaderboard
-            updateLeaderboard(distances);
+            updateLeaderboard(activeClients);
         });
 
-        function updateCursor(id, pos) {
-            let cursor = document.getElementById(id);
+        function updateCursor(clientID, pos) {
+            let cursor = document.getElementById(clientID);
             if (!cursor) {
                 cursor = document.createElement('div');
-                cursor.id = id;
+                cursor.id = clientID;
                 cursor.classList.add('cursor');
                 cursor.style.backgroundColor = getRandomColor();
                 document.body.appendChild(cursor);
             }
             cursor.style.left = pos.x + 'px';
             cursor.style.top = pos.y + 'px';
+        }
+
+        function getRandomColor() {
+            const letters = '0123456789ABCDEF';
+            let color = '#';
+            for (let i = 0; i < 6; i++) {
+                color += letters[Math.floor(Math.random() * 16)];
+            }
+            return color;
         }
 
         function removeDisconnectedCursors(activeIds) {
@@ -82,23 +90,15 @@
             });
         }
 
-        function updateLeaderboard(distances) {
+        function updateLeaderboard(activeClients) {
             const leaderboard = document.getElementById('leaderboard');
             leaderboard.innerHTML = '<h4>Leaderboard (Distance in Pixels)</h4>';
-            Object.entries(distances)
-                .sort((a, b) => b[1] - a[1]) // Sort by distance, descending
-                .forEach(([id, distance]) => {
-                    leaderboard.innerHTML += `<p>${id}: ${Math.round(distance)}px</p>`;
-                });
-        }
 
-        function getRandomColor() {
-            const letters = '0123456789ABCDEF';
-            let color = '#';
-            for (let i = 0; i < 6; i++) {
-                color += letters[Math.floor(Math.random() * 16)];
-            }
-            return color;
+            Object.entries(activeClients)
+                .sort((a, b) => b[1].distance - a[1].distance) // Sort by distance, descending
+                .forEach(([id, clientData]) => {
+                    leaderboard.innerHTML += `<p>${id}: ${Math.round(clientData.distance)}px</p>`;
+                });
         }
     </script>
 </body>

@@ -13,9 +13,6 @@ socketio = SocketIO(app)
 # Keep track of the cursor positions and distances traveled
 active_clients = {}
 
-cursor_positions = {}
-distances = {}
-
 
 @app.route("/")
 def index():
@@ -28,11 +25,11 @@ def handle_cursor_move(data):
     """Handle cursor move event."""
 
     # Get the client id and new position
-    client_id = data["id"]
+    client_id = request.sid
     position = {"x": data["x"], "y": data["y"]}
 
-    print(f'cursor {client_id} moved to {position["x"]}, {position["y"]}')
-    print(f'cursor positions: {active_clients}')
+    # print(f'cursor {client_id} moved to {position["x"]}, {position["y"]}')
+    # print(f'active_clients: {active_clients}')
 
     # If the client already exists in the active clients, then update the entry
     if client_id in active_clients:
@@ -62,7 +59,7 @@ def handle_cursor_move(data):
     # Broadcast the updated cursor positions and distances
     emit(
         "update_cursors",
-        {"positions": cursor_positions, "distances": distances},
+        {"active_clients": active_clients},
         broadcast=True,
     )
 
@@ -73,20 +70,16 @@ def handle_disconnect():
 
     # Get the client id
     client_id = request.sid
-    
     print(f'client {client_id} disconnected')
 
-    # Remove the client from the cursor positions and distances
-    if client_id in cursor_positions:
-        del cursor_positions[client_id]
-    
-    if client_id in distances:
-        del distances[client_id]
+    # Remove the client from active clients dictionary
+    if client_id in active_clients:
+        del active_clients[client_id]
 
     # Broadcast the updated cursor positions and distances
     emit(
         "update_cursors",
-        {"positions": cursor_positions, "distances": distances},
+        {"active_clients": active_clients},
         broadcast=True,
     )
 
