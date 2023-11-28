@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Multiplayer Cursor Game</title>
+    <style>
+        body {
+            background-color: white;
+            overflow: hidden;
+        }
+        .cursor {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            pointer-events: none;
+        }
+    </style>
+    <div id="leaderboard" style="position: absolute; top: 0; right: 0;"></div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.0/socket.io.js"></script>
+</head>
+<body>
+    <script>
+        const socket = io();
+        const myId = Math.random().toString(36).substr(2, 9); // Unique ID for this client
+
+        document.addEventListener('mousemove', (event) => {
+            socket.emit('move_cursor', { x: event.clientX, y: event.clientY });
+        });
+
+        socket.on('update_cursors', (cursors) => {
+            Object.entries(cursors).forEach(([id, pos]) => {
+                updateCursor(id, pos);
+            });
+        });
+
+        // Add this to your server-side code
+        let distances = {};
+
+        socket.on('cursor_move', (id, oldPos, newPos) => {
+            let distance = Math.sqrt(Math.pow(newPos.x - oldPos.x, 2) + Math.pow(newPos.y - oldPos.y, 2));
+            if (!distances[id]) {
+                distances[id] = 0;
+            }
+            distances[id] += distance;
+            io.emit('update_leaderboard', distances);
+        });
+
+        // Add this to your client-side code
+        socket.on('update_leaderboard', (distances) => {
+            let leaderboard = document.getElementById('leaderboard');
+            leaderboard.innerHTML = '';
+            Object.entries(distances).sort((a, b) => b[1] - a[1]).forEach(([id, distance]) => {
+                let entry = document.createElement('div');
+                entry.textContent = `ID: ${id}, Distance: ${distance.toFixed(2)}px`;
+                leaderboard.appendChild(entry);
+            });
+        });        
+
+        function updateCursor(data) {
+            let cursor = document.getElementById(data.id);
+            if (!cursor) {
+                cursor = document.createElement('div');
+                cursor.id = data.id;
+                cursor.classList.add('cursor');
+                cursor.style.backgroundColor = getRandomColor();
+                document.body.appendChild(cursor);
+            }
+            cursor.style.left = data.x + 'px';
+            cursor.style.top = data.y + 'px';
+        }
+
+        function getRandomColor() {
+            const letters = '0123456789ABCDEF';
+            let color = '#';
+            for (let i = 0; i < 6; i++) {
+                color += letters[Math.floor(Math.random() * 16)];
+            }
+            return color;
+        }
+    </script>
+</body>
+</html>
