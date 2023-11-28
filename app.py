@@ -4,45 +4,92 @@ from flask import request
 from flask_socketio import SocketIO
 from flask_socketio import emit
 
-from math import sqrt
-
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'secret!'
+app.config["SECRET_KEY"] = "i-am-really-secret"
 socketio = SocketIO(app)
+
+
+# Keep track of the cursor positions and distances traveled
+active_clients = {}
 
 cursor_positions = {}
 distances = {}
 
-@app.route('/')
+
+@app.route("/")
 def index():
-    return render_template('index.html')
+    """Return the index page."""
+    return render_template("index.html")
 
-@socketio.on('move_cursor')
+
+@socketio.on("move_cursor")
 def handle_cursor_move(data):
-    id = data['id']
-    new_position = {'x': data['x'], 'y': data['y']}
+    """Handle cursor move event."""
 
-    # Calculate distance traveled
-    if id in cursor_positions:
-        old_position = cursor_positions[id]
-        distance = sqrt((new_position['x'] - old_position['x'])**2 + (new_position['y'] - old_position['y'])**2)
-        distances[id] = distances.get(id, 0) + distance
+    # Get the client id and new position
+    client_id = data["id"]
+    position = {"x": data["x"], "y": data["y"]}
 
-    cursor_positions[id] = new_position
-    emit('update_cursors', {'positions': cursor_positions, 'distances': distances}, broadcast=True)
+    print(f'cursor {client_id} moved to {position["x"]}, {position["y"]}')
+    print(f'cursor positions: {active_clients}')
 
-@socketio.on('disconnect')
+    # If the client already exists in the active clients, then update the entry
+    if client_id in active_clients:
+        
+        # If the client has a previous position, calculate the distance
+        old_position = active_clients[client_id]['position']
+
+        # Calculate the distance traveled as a delta from the previous position
+        delta = (
+            abs((position["x"] - old_position["x"]))
+            + abs((position["y"] - old_position["y"]))
+        )
+
+        # If the client had a previous distance, add the new distance
+        active_clients[client_id]['distance'] = active_clients[client_id]['distance'] + delta
+    
+        # Update the cursor position
+        active_clients[client_id]['position'] = position
+
+    else:
+        # Add the client to the active clients
+        active_clients[client_id] = {
+            "position": position,
+            "distance": 0,
+        }
+
+    # Broadcast the updated cursor positions and distances
+    emit(
+        "update_cursors",
+        {"positions": cursor_positions, "distances": distances},
+        broadcast=True,
+    )
+
+
+@socketio.on("disconnect")
 def handle_disconnect():
-    # Assuming you have a way to get the client's unique ID on disconnect
-    # You need to identify which client has disconnected
+    """Handle disconnect event."""
+
+    # Get the client id
     client_id = request.sid
+    
+    print(f'client {client_id} disconnected')
+
+    # Remove the client from the cursor positions and distances
     if client_id in cursor_positions:
         del cursor_positions[client_id]
+    
+    if client_id in distances:
         del distances[client_id]
-        emit('update_cursors', {'positions': cursor_positions, 'distances': distances}, broadcast=True)
+
+    # Broadcast the updated cursor positions and distances
+    emit(
+        "update_cursors",
+        {"positions": cursor_positions, "distances": distances},
+        broadcast=True,
+    )
 
 
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     socketio.run(app, debug=True)
