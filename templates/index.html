@@ -10,13 +10,21 @@
         }
         .cursor {
             position: absolute;
-            width: 10px;
-            height: 10px;
+            width: 20px;
+            height: 20px;
             border-radius: 50%;
             pointer-events: none;
         }
+        #leaderboard {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: white;
+            border: 1px solid black;
+            padding: 10px;
+        }
     </style>
-    <div id="leaderboard" style="position: absolute; top: 0; right: 0;"></div>
+    <div id="leaderboard"></div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.0/socket.io.js"></script>
 </head>
 <body>
@@ -25,49 +33,42 @@
         const myId = Math.random().toString(36).substr(2, 9); // Unique ID for this client
 
         document.addEventListener('mousemove', (event) => {
-            socket.emit('move_cursor', { x: event.clientX, y: event.clientY });
+            socket.emit('move_cursor', { id: myId, x: event.clientX, y: event.clientY });
         });
 
-        socket.on('update_cursors', (cursors) => {
-            Object.entries(cursors).forEach(([id, pos]) => {
-                updateCursor(id, pos);
+        socket.on('update_cursors', (data) => {
+            const { positions, distances } = data;
+            const currentIds = Object.keys(positions);
+
+            currentIds.forEach(id => {
+                updateCursor(id, positions[id]);
             });
+
+            removeDisconnectedCursors(currentIds);
+            updateLeaderboard(distances);
         });
 
-        // Add this to your server-side code
-        let distances = {};
+        function updateLeaderboard(distances) {
+            const leaderboard = document.getElementById('leaderboard');
+            leaderboard.innerHTML = '<h4>Leaderboard (Distance in Pixels)</h4>';
+            Object.entries(distances)
+                .sort((a, b) => b[1] - a[1]) // Sort by distance, descending
+                .forEach(([id, distance]) => {
+                    leaderboard.innerHTML += `<p>${id}: ${Math.round(distance)}px</p>`;
+                });
+        }      
 
-        socket.on('cursor_move', (id, oldPos, newPos) => {
-            let distance = Math.sqrt(Math.pow(newPos.x - oldPos.x, 2) + Math.pow(newPos.y - oldPos.y, 2));
-            if (!distances[id]) {
-                distances[id] = 0;
-            }
-            distances[id] += distance;
-            io.emit('update_leaderboard', distances);
-        });
-
-        // Add this to your client-side code
-        socket.on('update_leaderboard', (distances) => {
-            let leaderboard = document.getElementById('leaderboard');
-            leaderboard.innerHTML = '';
-            Object.entries(distances).sort((a, b) => b[1] - a[1]).forEach(([id, distance]) => {
-                let entry = document.createElement('div');
-                entry.textContent = `ID: ${id}, Distance: ${distance.toFixed(2)}px`;
-                leaderboard.appendChild(entry);
-            });
-        });        
-
-        function updateCursor(data) {
-            let cursor = document.getElementById(data.id);
+        function updateCursor(id, pos) {
+            let cursor = document.getElementById(id);
             if (!cursor) {
                 cursor = document.createElement('div');
-                cursor.id = data.id;
+                cursor.id = id;
                 cursor.classList.add('cursor');
                 cursor.style.backgroundColor = getRandomColor();
                 document.body.appendChild(cursor);
             }
-            cursor.style.left = data.x + 'px';
-            cursor.style.top = data.y + 'px';
+            cursor.style.left = pos.x + 'px';
+            cursor.style.top = pos.y + 'px';
         }
 
         function getRandomColor() {
@@ -77,6 +78,15 @@
                 color += letters[Math.floor(Math.random() * 16)];
             }
             return color;
+        }
+
+        function removeDisconnectedCursors(currentIds) {
+            const allCursorElements = document.getElementsByClassName('cursor');
+            Array.from(allCursorElements).forEach(cursorElem => {
+                if (!currentIds.includes(cursorElem.id)) {
+                    cursorElem.remove();
+                }
+            });
         }
     </script>
 </body>
