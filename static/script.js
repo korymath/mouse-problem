@@ -79,8 +79,8 @@ function updateCursor(id, x, y) {
         cursor.id = id;
         cursor.classList.add('cursor');
         cursor.style.position = 'absolute';
-        cursor.style.height = '10px';
-        cursor.style.width = '10px';
+        cursor.style.height = '20px';
+        cursor.style.width = '20px';
         cursor.style.backgroundColor = getRandomColor();
         cursor.style.borderRadius = '50%';
         cursor.style.pointerEvents = 'none';
