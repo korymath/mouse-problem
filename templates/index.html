@@ -4,103 +4,16 @@
 <head>
     <meta charset="UTF-8">
     <title>Multiplayer Cursor Game</title>
-    <style>
-        body {
-            background-color: white;
-            overflow: hidden;
-        }
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.0/socket.io.js"></script>
+    <script src="/static/script.js"></script>
+</head>
 
-        .cursor {
-            position: absolute;
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            pointer-events: none;
-        }
-
-        #leaderboard {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            background-color: white;
-            border: 1px solid black;
-            padding: 10px;
-        }
-    </style>
+<body>
     <div id="leaderboard">
         <h4>Leaderboard (Distance in Pixels)</h4>
         <p>Waiting for players...</p>
     </div>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.0/socket.io.js"></script>
-</head>
-
-<body>
-    <script>
-        const socket = io();
-
-        document.addEventListener('mousemove', (event) => {
-            socket.emit('move_cursor', { x: event.clientX, y: event.clientY });
-        });
-
-        socket.on('update_cursors', (data) => {
-            const activeClients = data.active_clients;
-            const activeIds = Object.keys(activeClients);
-
-            // Update active cursors
-            activeIds.forEach(clientID => {
-                updateCursor(clientID, activeClients[clientID]['position']);
-            });
-
-            // Remove cursors of disconnected clients
-            removeDisconnectedCursors(activeIds);
-
-            // Update leaderboard
-            updateLeaderboard(activeClients);
-        });
-
-        function updateCursor(clientID, pos) {
-            let cursor = document.getElementById(clientID);
-            if (!cursor) {
-                cursor = document.createElement('div');
-                cursor.id = clientID;
-                cursor.classList.add('cursor');
-                cursor.style.backgroundColor = getRandomColor();
-                document.body.appendChild(cursor);
-            }
-            cursor.style.left = pos.x + 'px';
-            cursor.style.top = pos.y + 'px';
-        }
-
-        function getRandomColor() {
-            const letters = '0123456789ABCDEF';
-            let color = '#';
-            for (let i = 0; i < 6; i++) {
-                color += letters[Math.floor(Math.random() * 16)];
-            }
-            return color;
-        }
-
-        function removeDisconnectedCursors(activeIds) {
-            const allCursorElements = document.getElementsByClassName('cursor');
-
-            Array.from(allCursorElements).forEach(cursorElem => {
-                if (!activeIds.includes(cursorElem.id)) {
-                    cursorElem.remove();
-                }
-            });
-        }
-
-        function updateLeaderboard(activeClients) {
-            const leaderboard = document.getElementById('leaderboard');
-            leaderboard.innerHTML = '<h4>Leaderboard (Distance in Pixels)</h4>';
-
-            Object.entries(activeClients)
-                .sort((a, b) => b[1].distance - a[1].distance) // Sort by distance, descending
-                .forEach(([id, clientData]) => {
-                    leaderboard.innerHTML += `<p>${id}: ${Math.round(clientData.distance)}px</p>`;
-                });
-        }
-    </script>
 </body>
 
 </html>

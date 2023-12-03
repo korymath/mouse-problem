@@ -1,17 +1,98 @@
+import eventlet
+
+eventlet.monkey_patch()
+
+import time
+import threading
+
 from flask import Flask
 from flask import render_template
 from flask import request
 from flask_socketio import SocketIO
-from flask_socketio import emit
 
 
+# Set up the Flask app and SocketIO
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "i-am-really-secret"
 socketio = SocketIO(app)
 
 
-# Keep track of the cursor positions and distances traveled
-active_clients = {}
+# Using a class as a singleton to keep track of the cursor positions
+class CursorGameManager:
+    """Class to keep track of the cursor positions."""
+
+    def __init__(self):
+        self.lock = eventlet.semaphore.Semaphore()
+        self.active_clients = {}
+        self.last_update_time = 0
+
+    def update_client(self, cursor_id, position, total_distance):
+        """Add a cursor position to the active clients dictionary."""
+        with self.lock:
+            if cursor_id not in self.active_clients:
+                print(f"client {cursor_id} connected")
+                self.active_clients[cursor_id] = {}
+                self.active_clients[cursor_id]["position"] = position
+                self.active_clients[cursor_id]["distance"] = 0
+
+            else:
+                # Add the cursor position to the dictionary
+                self.active_clients[cursor_id]["position"] = position
+
+                # Add distance to the active clients dictionary
+                self.active_clients[cursor_id]["distance"] = total_distance
+
+                # keep track of the last time a cursor was moved
+                # TODO(korymath): this should likely be per client
+                # as opposed to shared and global
+                self.last_update_time = time.time()
+
+    def remove_position(self, cursor_id):
+        """Remove a cursor position from the active clients dictionary."""
+        with self.lock:
+            self.active_clients.pop(cursor_id, None)
+            print(f"client {cursor_id} disconnected")
+
+            # If there are active_clients to broadcast, then emit the event
+            if self.active_clients:
+                # Broadcast the updated active_clients to everyone
+                socketio.emit("client_disconnect", self.active_clients)
+
+    def get_active_clients(self):
+        """Return the active clients dictionary."""
+        with self.lock:
+            print(f"self.active_clients: {self.active_clients}")
+            return dict(self.active_clients)
+
+
+game_manager = CursorGameManager()
+
+
+def broadcast_positions():
+    """Broadcast cursor positions to clients with debouncing and throttling."""
+
+    # Debounce interval in seconds
+    debounce_interval = 0.05
+
+    while True:
+        eventlet.sleep(debounce_interval)
+
+        # If the last update time is within the debounce interval
+        # then skip this update
+        current_time = time.time()
+        if current_time - game_manager.last_update_time > debounce_interval:
+            continue
+
+        # Get the active clients
+        try:
+            active_clients = game_manager.get_active_clients()
+        except Exception as e:
+            print(f"Error getting active_clients: {e}")
+            active_clients = None
+
+        # If there are active_clients to broadcast, then emit the event
+        if active_clients:
+            socketio.emit("batch_update", active_clients)
 
 
 @app.route("/")
@@ -22,45 +103,9 @@ def index():
 
 @socketio.on("move_cursor")
 def handle_cursor_move(data):
-    """Handle cursor move event."""
-
-    # Get the client id and new position
-    client_id = request.sid
-    position = {"x": data["x"], "y": data["y"]}
-
-    # print(f'cursor {client_id} moved to {position["x"]}, {position["y"]}')
-    # print(f'active_clients: {active_clients}')
-
-    # If the client already exists in the active clients, then update the entry
-    if client_id in active_clients:
-        
-        # If the client has a previous position, calculate the distance
-        old_position = active_clients[client_id]['position']
-
-        # Calculate the distance traveled as a delta from the previous position
-        delta = (
-            abs((position["x"] - old_position["x"]))
-            + abs((position["y"] - old_position["y"]))
-        )
-
-        # If the client had a previous distance, add the new distance
-        active_clients[client_id]['distance'] = active_clients[client_id]['distance'] + delta
-    
-        # Update the cursor position
-        active_clients[client_id]['position'] = position
-
-    else:
-        # Add the client to the active clients
-        active_clients[client_id] = {
-            "position": position,
-            "distance": 0,
-        }
-
-    # Broadcast the updated cursor positions and distances
-    emit(
-        "update_cursors",
-        {"active_clients": active_clients},
-        broadcast=True,
+    """Handle cursor move event by handling client update."""
+    game_manager.update_client(
+        request.sid, {"x": data["x"], "y": data["y"]}, data["totalDistance"]
     )
 
 
@@ -68,21 +113,15 @@ def handle_cursor_move(data):
 def handle_disconnect():
     """Handle disconnect event."""
 
-    # Get the client id
-    client_id = request.sid
-    print(f'client {client_id} disconnected')
-
     # Remove the client from active clients dictionary
-    if client_id in active_clients:
-        del active_clients[client_id]
+    game_manager.remove_position(request.sid)
 
-    # Broadcast the updated cursor positions and distances
-    emit(
-        "update_cursors",
-        {"active_clients": active_clients},
-        broadcast=True,
-    )
+    # If there are active_clients to broadcast, then emit the event
+    active_clients = game_manager.get_active_clients()
+    if active_clients:
+        socketio.emit("batch_update", active_clients)
 
 
 if __name__ == "__main__":
+    threading.Thread(target=broadcast_positions, daemon=True).start()
     socketio.run(app, debug=True)
