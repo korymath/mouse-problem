@@ -124,4 +124,4 @@ def handle_disconnect():
 
 if __name__ == "__main__":
     threading.Thread(target=broadcast_positions, daemon=True).start()
-    socketio.run(app, debug=True)
+    socketio.run(app, debug=True, port=2121)
